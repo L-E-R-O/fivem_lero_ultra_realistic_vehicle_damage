@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'LERO'
 version '1.0.0'
-description 'Ein fortschrittliches Fahrzeugschadenssystem für GTA V RP-Server mit realistischer Schadensmechanik und Mechaniker-Interaktionen'
+description 'An advanced vehicle damage system for GTA V RP servers with realistic damage mechanics and mechanic interactions'
 
 client_scripts {
     'client.lua'
