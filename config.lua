@@ -1,7 +1,5 @@
 -- Konfiguration für das Vehicle Damage Script
 cfg = {
-    repairTimeoutMS = 5000, -- Wartezeit in Millisekunden für Reparaturen
-
     deformationMultiplier = -1, -- Verformungsmultiplikator (-1 = keine Änderung)
     deformationExponent = 0.4, -- Komprimiert Verformungswerte Richtung 1.0
     collisionDamageExponent = 0.6, -- Komprimiert Kollisionsschaden Richtung 1.0
@@ -11,24 +9,16 @@ cfg = {
     damageFactorPetrolTank = 32.0, -- Schadensfaktor für den Tank
     engineDamageExponent = 0.6, -- Komprimiert Motorschaden Richtung 1.0
     weaponsDamageMultiplier = 0.01, -- Waffenschaden-Multiplikator
-    degradingHealthSpeedFactor = 10, -- Geschwindigkeit der langsamen Verschlechterung
-    cascadingFailureSpeedFactor = 8.0, -- Geschwindigkeit des Kaskadeneffekts
+    minDamageThreshold = 5.0, -- Minimaler Roh-Schadenswert um als Kollision erkannt zu werden
 
-    degradingFailureThreshold = 800.0, -- Schwelle für langsame Verschlechterung
     cascadingFailureThreshold = 360.0, -- Schwelle für Kaskadeneffekt
     engineSafeGuard = 100.0, -- Minimaler Motorzustand vor Totalausfall
 
     torqueMultiplierEnabled = true, -- Aktiviert Drehmoment-Anpassung bei Schaden
     limpMode = false, -- Wenn true, bleibt der Motor immer minimal funktionsfähig
     limpModeMultiplier = 0.15, -- Drehmoment-Multiplikator im Limp-Modus
-    preventVehicleFlip = true, -- Verhindert das Umdrehen eines umgekippten Fahrzeugs
-    sundayDriver = false, -- Ermöglicht langsames Fahren mit angepasster Gasannahme
-    sundayDriverAcceleratorCurve = 7.5, -- Kurve für Gaspedal im Sunday-Driver-Modus
-    sundayDriverBrakeCurve = 5.0, -- Kurve für Bremse im Sunday-Driver-Modus
 
-    displayBlips = false, -- Blips deaktiviert, da Mechaniker-Standorte entfernt wurden
     compatibilityMode = false, -- Verhindert Tankmanipulation durch andere Skripte
-    randomTireBurstInterval = 0, -- Minuten bis zum zufälligen Reifenplatzer (0 = deaktiviert)
 
     -- Schadensmultiplikatoren je Fahrzeugklasse
     classDamageMultiplier = {
