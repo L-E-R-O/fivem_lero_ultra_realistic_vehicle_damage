@@ -13,16 +13,14 @@ This isn't just another damage script—it's a complete physics overhaul that br
 
 ### 🎯 Key Features
 
-- **🔧 Progressive Engine Damage** - Engines don't just break, they *slowly die*
-- **⚡ Cascading Failures** - One problem leads to another, just like real life
-- **🛢️ Oil & Fuel System** - Leaking oil? Your engine won't last long
+- **🔧 Realistic Engine Damage** - Engine health reacts to collisions and impacts only
+- **⚡ Cascading Failures** - Severe damage escalates quickly
+- **🛢️ Oil & Fuel System** - Emergency repairs use oil and are temporary
 - **🚙 Vehicle Class Balancing** - Motorcycles break easier than tanks (obviously!)
 - **🎨 Deformation Physics** - Watch your car crumple realistically
-- **🛞 Dynamic Tire Bursts** - Random flats keep you on your toes
-- **🐌 Sunday Driver Mode** - Smooth acceleration for those chill drives
-- **🚫 Anti-Flip Protection** - No more magical car flipping
 - **💪 Limp Mode** - Even dying engines can crawl home
 - **🔨 Emergency Repairs** - MacGyver your way out with duct tape (temporarily!)
+- **🌫️ Catastrophic Smoke** - Massive smoke effect when the engine is dead
 
 ## 📦 Installation
 
@@ -46,17 +44,19 @@ cfg = {
     damageFactorEngine = 5.0,      -- Engine damage intensity
     damageFactorBody = 5.0,        -- Body damage intensity
     damageFactorPetrolTank = 32.0, -- Fuel tank damage intensity
-    
+
     -- Special features
     torqueMultiplierEnabled = true, -- Damaged engines = less power
-    limpMode = false,              -- Allow crawling with dead engine
-    preventVehicleFlip = true,     -- Stop the car flip exploit
-    sundayDriver = false,          -- Smooth throttle control
-    
+    limpMode = false,               -- Allow crawling with dead engine
+
     -- Thresholds
-    degradingFailureThreshold = 800.0, -- When slow degradation starts
+    minDamageThreshold = 5.0,       -- Minimum raw delta to count as damage
     cascadingFailureThreshold = 360.0, -- When everything falls apart
-    engineSafeGuard = 100.0,          -- Minimum engine health
+    engineSafeGuard = 100.0,        -- Minimum engine health
+
+    -- Smoke effects
+    engineSmokeEnabled = true,      -- Enable catastrophic engine smoke
+    engineSmokeScale = 5.0,         -- Smoke size (1.0 small, 10.0 extreme)
 }
 ```
 
@@ -78,7 +78,7 @@ Different vehicles take damage differently! Customize how fragile each vehicle c
 Traditional damage systems are boring. They just reduce a number and maybe smoke a bit. **Boring!** 😴
 
 This system brings **drama** to your server:
-- That fender bender? Your engine is now slowly dying.
+- That fender bender? Your engine health drops immediately.
 - Crashed into a wall? Better limp to a mechanic before total failure!
 - Got shot? Hope you like walking!
 - Oil running low? That repair won't hold for long...
@@ -88,7 +88,7 @@ It's not about *if* your car will break down, it's about *when* and *how dramati
 ## 💡 Pro Tips
 
 1. **Drive carefully** - Repairs are temporary and use oil!
-2. **Watch your engine health** - Below 800? Start worrying. Below 360? Start praying.
+2. **Watch your engine health** - Below 360? Start praying.
 3. **Different vehicles = different durability** - Don't crash motorcycles!
 4. **Keep oil in your tank** - No oil = no repairs = walking simulator
 
