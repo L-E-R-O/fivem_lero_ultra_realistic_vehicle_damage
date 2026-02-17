@@ -9,9 +9,9 @@ local fEngineDamageMult = 0.0 -- Multiplikator für Motorschaden
 local fBrakeForce = 1.0 -- Bremskraft-Multiplikator
 
 -- Variablen für Raucheffekt bei Motorschaden
-local engineSmokeActive = false
-local engineSmokePtfx = nil
-local engineSmokeVehicle = nil -- Fahrzeug das gerade raucht
+local engineSmokeData = {} -- [netId] = { ptfx = { ... } }
+local engineSmokeSyncState = {} -- [netId] = true wenn synchronisiert
+local engineSmokeRemoteState = {} -- [netId] = true wenn Sync aktiv ist
 
 -- Variablen für Motorzustand
 local healthEngineLast = 1000.0 -- Letzter Motorzustand
@@ -58,19 +58,40 @@ local function isPedDrivingAVehicle()
     return false
 end
 
+local function isSmokeActive(netId)
+    return netId and engineSmokeData[netId] ~= nil
+end
+
+local function isVehicleDriver(veh, ped)
+    if not DoesEntityExist(veh) then return false end
+    return GetPedInVehicleSeat(veh, -1) == ped
+end
+
+local function syncEngineSmoke(netId, enabled, veh, ped)
+    if not cfg.engineSmokeSync or not netId or netId == 0 then return end
+    if cfg.engineSmokeSyncDriverOnly and (not veh or not ped or not isVehicleDriver(veh, ped)) then return end
+    if enabled then
+        if engineSmokeSyncState[netId] then return end
+        TriggerServerEvent('ultra_damage:engineSmokeSync', netId, true)
+        engineSmokeSyncState[netId] = true
+    else
+        if not engineSmokeSyncState[netId] then return end
+        TriggerServerEvent('ultra_damage:engineSmokeSync', netId, false)
+        engineSmokeSyncState[netId] = nil
+    end
+end
+
 -- Startet den großen Raucheffekt am Motor (nicht-blockierend)
-local function startEngineSmoke(veh)
+local function startEngineSmoke(veh, netId)
     if not cfg.engineSmokeEnabled then return end
-    if engineSmokeActive then return end
-    engineSmokeActive = true -- Sofort setzen um Mehrfachaufruf zu verhindern
-    engineSmokeVehicle = veh
+    if not DoesEntityExist(veh) then return end
+    netId = netId or NetworkGetNetworkIdFromEntity(veh)
+    if not netId or netId == 0 then return end
+    if engineSmokeData[netId] then return end
+    engineSmokeData[netId] = { ptfx = {} }
+
     -- In eigenem Thread spawnen, damit der Haupt-Thread nicht blockiert wird
     Citizen.CreateThread(function()
-        -- Alten Rauch auf anderem Fahrzeug aufräumen
-        if engineSmokePtfx then
-            StopParticleFxLooped(engineSmokePtfx, false)
-            engineSmokePtfx = nil
-        end
         -- Asset laden mit Timeout (max 3 Sekunden)
         local asset = 'core'
         RequestNamedPtfxAsset(asset)
@@ -80,39 +101,112 @@ local function startEngineSmoke(veh)
             timeout = timeout + 1
         end
         if not HasNamedPtfxAssetLoaded(asset) then
-            engineSmokeActive = false
+            engineSmokeData[netId] = nil
             return
         end
         -- Prüfen ob Fahrzeug noch existiert
         if not DoesEntityExist(veh) then
-            engineSmokeActive = false
+            engineSmokeData[netId] = nil
             return
         end
-        UseParticleFxAssetNextCall(asset)
+        if not engineSmokeData[netId] then return end
+
+        local data = engineSmokeData[netId]
         local scale = cfg.engineSmokeScale or 5.0
-        engineSmokePtfx = StartParticleFxLoopedOnEntity('ent_ray_prologue_smoke', veh, 0.0, 1.5, 0.3, 0.0, 0.0, 0.0, scale, false, false, false)
-        if not engineSmokePtfx or engineSmokePtfx == 0 then
-            -- Fallback-Effekt
+        local offsetY = cfg.engineSmokeOffsetY or 1.5
+        local offsetZ = cfg.engineSmokeOffsetZ or 0.3
+        local stackCount = cfg.engineSmokeStackCount or 2
+        local stackStepZ = cfg.engineSmokeStackStepZ or 0.6
+        local stackScaleFalloff = cfg.engineSmokeStackScaleFalloff or 0.85
+
+        for i = 0, stackCount - 1 do
+            local z = offsetZ + (i * stackStepZ)
+            local s = scale * (stackScaleFalloff ^ i)
             UseParticleFxAssetNextCall(asset)
-            engineSmokePtfx = StartParticleFxLoopedOnEntity('exp_grd_grenade_smoke', veh, 0.0, 1.5, 0.3, 0.0, 0.0, 0.0, scale * 0.8, false, false, false)
+            local ptfx = StartParticleFxLoopedOnEntity('ent_ray_prologue_smoke', veh, 0.0, offsetY, z, 0.0, 0.0, 0.0, s, false, false, false)
+            if not ptfx or ptfx == 0 then
+                -- Fallback-Effekt
+                UseParticleFxAssetNextCall(asset)
+                ptfx = StartParticleFxLoopedOnEntity('exp_grd_grenade_smoke', veh, 0.0, offsetY, z, 0.0, 0.0, 0.0, s * 0.8, false, false, false)
+            end
+            if ptfx and ptfx ~= 0 then
+                SetParticleFxLoopedColour(ptfx, 0.05, 0.05, 0.05, false)
+                SetParticleFxLoopedAlpha(ptfx, 1.0)
+                table.insert(data.ptfx, ptfx)
+            end
         end
-        if engineSmokePtfx and engineSmokePtfx ~= 0 then
-            SetParticleFxLoopedColour(engineSmokePtfx, 0.05, 0.05, 0.05, false)
-            SetParticleFxLoopedAlpha(engineSmokePtfx, 1.0)
+
+        if #data.ptfx == 0 then
+            engineSmokeData[netId] = nil
         end
     end)
 end
 
 -- Stoppt den Raucheffekt
-local function stopEngineSmoke()
-    if not engineSmokeActive then return end
-    if engineSmokePtfx then
-        StopParticleFxLooped(engineSmokePtfx, false)
-        engineSmokePtfx = nil
+local function stopEngineSmokeForNetId(netId)
+    if not netId or netId == 0 then return end
+    local data = engineSmokeData[netId]
+    if not data then return end
+    if data.ptfx and #data.ptfx > 0 then
+        for _, ptfx in ipairs(data.ptfx) do
+            StopParticleFxLooped(ptfx, false)
+        end
     end
-    engineSmokeVehicle = nil
-    engineSmokeActive = false
+    engineSmokeData[netId] = nil
 end
+
+RegisterNetEvent('ultra_damage:engineSmokeSync')
+AddEventHandler('ultra_damage:engineSmokeSync', function(netId, enabled)
+    if not cfg.engineSmokeEnabled or not netId or netId == 0 then return end
+    if enabled then
+        engineSmokeRemoteState[netId] = true
+        local veh = NetToVeh(netId)
+        if DoesEntityExist(veh) then
+            local range = cfg.engineSmokeSyncRange or 200.0
+            local ped = PlayerPedId()
+            local pedCoords = GetEntityCoords(ped)
+            local vehCoords = GetEntityCoords(veh)
+            if #(pedCoords - vehCoords) > range then return end
+            startEngineSmoke(veh, netId)
+        end
+    else
+        engineSmokeRemoteState[netId] = nil
+        stopEngineSmokeForNetId(netId)
+        engineSmokeSyncState[netId] = nil
+    end
+end)
+
+-- Abstand-Refresh fuer synchronisierten Rauch
+Citizen.CreateThread(function()
+    while true do
+        local refreshMs = cfg.engineSmokeSyncRefreshMS or 1000
+        Citizen.Wait(refreshMs)
+        if not cfg.engineSmokeEnabled or not cfg.engineSmokeSync then
+            goto continue
+        end
+        local range = cfg.engineSmokeSyncRange or 200.0
+        local ped = PlayerPedId()
+        local pedCoords = GetEntityCoords(ped)
+        for netId, _ in pairs(engineSmokeRemoteState) do
+            local veh = NetToVeh(netId)
+            if not DoesEntityExist(veh) then
+                engineSmokeRemoteState[netId] = nil
+                stopEngineSmokeForNetId(netId)
+            else
+                local vehCoords = GetEntityCoords(veh)
+                local inRange = #(pedCoords - vehCoords) <= range
+                if inRange then
+                    if not isSmokeActive(netId) then
+                        startEngineSmoke(veh, netId)
+                    end
+                elseif isSmokeActive(netId) then
+                    stopEngineSmokeForNetId(netId)
+                end
+            end
+        end
+        ::continue::
+    end
+end)
 
 -- Event-Handler für Fahrzeugreparatur
 RegisterNetEvent('iens:repair')
@@ -131,7 +225,9 @@ AddEventHandler('iens:repair', function()
             healthEngineLast, healthPetrolTankLast = cfg.cascadingFailureThreshold + 5, 750.0
             SetVehicleEngineOn(vehicle, true, false)
             SetVehicleOilLevel(vehicle, (GetVehicleOilLevel(vehicle) / 3) - 0.5)
-            stopEngineSmoke()
+            local netId = NetworkGetNetworkIdFromEntity(vehicle)
+            stopEngineSmokeForNetId(netId)
+            syncEngineSmoke(netId, false, vehicle, ped)
             notification("~g~" .. repairCfg.fixMessages[fixMessagePos] .. ", das hält nicht lange!")
             fixMessagePos = (fixMessagePos % repairCfg.fixMessageCount) + 1
         else
@@ -192,16 +288,23 @@ Citizen.CreateThread(function()
             healthPetrolTankDelta = healthPetrolTankLast - healthPetrolTankCurrent
             healthPetrolTankDeltaScaled = healthPetrolTankDelta * cfg.damageFactorPetrolTank * (cfg.classDamageMultiplier[vehicleClass] or 1.0)
 
+            local netId = NetworkGetNetworkIdFromEntity(vehicle)
+
             -- Fahrzeug fahrbar oder nicht?
             if healthEngineCurrent > cfg.engineSafeGuard + 1 then
                 SetVehicleUndriveable(vehicle, false)
-                if engineSmokeActive then stopEngineSmoke() end
+                if isSmokeActive(netId) then
+                    stopEngineSmokeForNetId(netId)
+                    syncEngineSmoke(netId, false, vehicle, ped)
+                end
             elseif not cfg.limpMode then
                 SetVehicleUndriveable(vehicle, true)
-                startEngineSmoke(vehicle)
+                startEngineSmoke(vehicle, netId)
+                syncEngineSmoke(netId, true, vehicle, ped)
             else
                 -- Limp-Mode aktiv, Motor kaputt → trotzdem Rauch
-                startEngineSmoke(vehicle)
+                startEngineSmoke(vehicle, netId)
+                syncEngineSmoke(netId, true, vehicle, ped)
             end
 
             if vehicle ~= lastVehicle then pedInSameVehicleLast = false end

@@ -21,7 +21,16 @@ cfg = {
     compatibilityMode = false, -- Verhindert Tankmanipulation durch andere Skripte
 
     engineSmokeEnabled = true, -- Aktiviert Raucheffekt bei Motorschaden (true/false)
-    engineSmokeScale = 1.0, -- Größe des Raucheffekts (1.0 = klein, 3.0 = mittel, 5.0 = groß, 10.0 = extrem)
+    engineSmokeSync = true, -- Synchronisiert Rauch fuer alle Spieler
+    engineSmokeSyncDriverOnly = true, -- Nur Fahrer duerfen Sync ausloesen
+    engineSmokeSyncRange = 200.0, -- Sync-Reichweite in Metern (nur fuer Empfaenger)
+    engineSmokeSyncRefreshMS = 1000, -- Abstand-Refresh Intervall in Millisekunden
+    engineSmokeScale = 0.5, -- Größe des Raucheffekts (1.0 = klein, 3.0 = mittel, 5.0 = groß, 10.0 = extrem)
+    engineSmokeOffsetY = 1.2, -- Position des Rauchs nach vorne/hinten (Y-Achse)
+    engineSmokeOffsetZ = 0, -- Start-Hoehe des Rauchs (Z-Achse)
+    engineSmokeStackCount = 5, -- Anzahl der Rauchschichten (1 = nur bodennah, 2+ = steigt sichtbar)
+    engineSmokeStackStepZ = 0.3, -- Abstand zwischen den Schichten (Z-Achse)
+    engineSmokeStackScaleFalloff = 0.8, -- Skalierungsfaktor je Schicht (0.5-1.0)
 
     -- Schadensmultiplikatoren je Fahrzeugklasse
     classDamageMultiplier = {
