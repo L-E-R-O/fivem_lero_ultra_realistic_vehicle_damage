@@ -8,6 +8,11 @@ local fDeformationDamageMult = 0.0 -- Multiplikator für Verformungsschaden
 local fEngineDamageMult = 0.0 -- Multiplikator für Motorschaden
 local fBrakeForce = 1.0 -- Bremskraft-Multiplikator
 
+-- Variablen für Raucheffekt bei Motorschaden
+local engineSmokeActive = false
+local engineSmokePtfx = nil
+local engineSmokeVehicle = nil -- Fahrzeug das gerade raucht
+
 -- Variablen für Motorzustand
 local healthEngineLast = 1000.0 -- Letzter Motorzustand
 local healthEngineCurrent = 1000.0 -- Aktueller Motorzustand
@@ -53,6 +58,62 @@ local function isPedDrivingAVehicle()
     return false
 end
 
+-- Startet den großen Raucheffekt am Motor (nicht-blockierend)
+local function startEngineSmoke(veh)
+    if not cfg.engineSmokeEnabled then return end
+    if engineSmokeActive then return end
+    engineSmokeActive = true -- Sofort setzen um Mehrfachaufruf zu verhindern
+    engineSmokeVehicle = veh
+    -- In eigenem Thread spawnen, damit der Haupt-Thread nicht blockiert wird
+    Citizen.CreateThread(function()
+        -- Alten Rauch auf anderem Fahrzeug aufräumen
+        if engineSmokePtfx then
+            StopParticleFxLooped(engineSmokePtfx, false)
+            engineSmokePtfx = nil
+        end
+        -- Asset laden mit Timeout (max 3 Sekunden)
+        local asset = 'core'
+        RequestNamedPtfxAsset(asset)
+        local timeout = 0
+        while not HasNamedPtfxAssetLoaded(asset) and timeout < 300 do
+            Citizen.Wait(10)
+            timeout = timeout + 1
+        end
+        if not HasNamedPtfxAssetLoaded(asset) then
+            engineSmokeActive = false
+            return
+        end
+        -- Prüfen ob Fahrzeug noch existiert
+        if not DoesEntityExist(veh) then
+            engineSmokeActive = false
+            return
+        end
+        UseParticleFxAssetNextCall(asset)
+        local scale = cfg.engineSmokeScale or 5.0
+        engineSmokePtfx = StartParticleFxLoopedOnEntity('ent_ray_prologue_smoke', veh, 0.0, 1.5, 0.3, 0.0, 0.0, 0.0, scale, false, false, false)
+        if not engineSmokePtfx or engineSmokePtfx == 0 then
+            -- Fallback-Effekt
+            UseParticleFxAssetNextCall(asset)
+            engineSmokePtfx = StartParticleFxLoopedOnEntity('exp_grd_grenade_smoke', veh, 0.0, 1.5, 0.3, 0.0, 0.0, 0.0, scale * 0.8, false, false, false)
+        end
+        if engineSmokePtfx and engineSmokePtfx ~= 0 then
+            SetParticleFxLoopedColour(engineSmokePtfx, 0.05, 0.05, 0.05, false)
+            SetParticleFxLoopedAlpha(engineSmokePtfx, 1.0)
+        end
+    end)
+end
+
+-- Stoppt den Raucheffekt
+local function stopEngineSmoke()
+    if not engineSmokeActive then return end
+    if engineSmokePtfx then
+        StopParticleFxLooped(engineSmokePtfx, false)
+        engineSmokePtfx = nil
+    end
+    engineSmokeVehicle = nil
+    engineSmokeActive = false
+end
+
 -- Event-Handler für Fahrzeugreparatur
 RegisterNetEvent('iens:repair')
 AddEventHandler('iens:repair', function()
@@ -70,6 +131,7 @@ AddEventHandler('iens:repair', function()
             healthEngineLast, healthPetrolTankLast = cfg.cascadingFailureThreshold + 5, 750.0
             SetVehicleEngineOn(vehicle, true, false)
             SetVehicleOilLevel(vehicle, (GetVehicleOilLevel(vehicle) / 3) - 0.5)
+            stopEngineSmoke()
             notification("~g~" .. repairCfg.fixMessages[fixMessagePos] .. ", das hält nicht lange!")
             fixMessagePos = (fixMessagePos % repairCfg.fixMessageCount) + 1
         else
@@ -133,8 +195,13 @@ Citizen.CreateThread(function()
             -- Fahrzeug fahrbar oder nicht?
             if healthEngineCurrent > cfg.engineSafeGuard + 1 then
                 SetVehicleUndriveable(vehicle, false)
+                if engineSmokeActive then stopEngineSmoke() end
             elseif not cfg.limpMode then
                 SetVehicleUndriveable(vehicle, true)
+                startEngineSmoke(vehicle)
+            else
+                -- Limp-Mode aktiv, Motor kaputt → trotzdem Rauch
+                startEngineSmoke(vehicle)
             end
 
             if vehicle ~= lastVehicle then pedInSameVehicleLast = false end
@@ -186,6 +253,7 @@ Citizen.CreateThread(function()
             if cfg.weaponsDamageMultiplier ~= -1 then SetVehicleHandlingFloat(lastVehicle, 'CHandlingData', 'fWeaponDamageMult', cfg.weaponsDamageMultiplier) end
             SetVehicleHandlingFloat(lastVehicle, 'CHandlingData', 'fCollisionDamageMult', fCollisionDamageMult)
             SetVehicleHandlingFloat(lastVehicle, 'CHandlingData', 'fEngineDamageMult', fEngineDamageMult)
+            -- Rauch bleibt am Fahrzeug! Wird nur durch Reparatur gestoppt
             pedInSameVehicleLast = false
         end
     end

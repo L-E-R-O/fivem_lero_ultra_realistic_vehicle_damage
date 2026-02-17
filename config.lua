@@ -20,6 +20,9 @@ cfg = {
 
     compatibilityMode = false, -- Verhindert Tankmanipulation durch andere Skripte
 
+    engineSmokeEnabled = true, -- Aktiviert Raucheffekt bei Motorschaden (true/false)
+    engineSmokeScale = 1.0, -- Größe des Raucheffekts (1.0 = klein, 3.0 = mittel, 5.0 = groß, 10.0 = extrem)
+
     -- Schadensmultiplikatoren je Fahrzeugklasse
     classDamageMultiplier = {
         [0] = 1.0, -- Compacts
